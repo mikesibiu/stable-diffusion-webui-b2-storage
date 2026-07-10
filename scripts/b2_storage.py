@@ -124,9 +124,12 @@ def on_image_saved(params: script_callbacks.ImageSaveParams):
     # e.g., "outputs/txt2img-images/2026-07-09/00001.png"
     base_dir = os.path.abspath(os.path.join(extension_dir, "..", ".."))
     abs_local_path = os.path.abspath(local_path)
-    if abs_local_path.startswith(base_dir + os.sep):
+    try:
         remote_name = os.path.relpath(abs_local_path, base_dir)
-    else:
+        # Outside the WebUI root (or on another Windows drive): flat name only
+        if remote_name.startswith("..") or os.path.isabs(remote_name):
+            remote_name = os.path.basename(local_path)
+    except ValueError:
         remote_name = os.path.basename(local_path)
 
     # Normalize path separators for cloud storage (always forward slashes)

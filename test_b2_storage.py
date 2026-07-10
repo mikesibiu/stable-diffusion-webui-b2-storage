@@ -144,6 +144,25 @@ class TestImageSavedQueueing(B2StorageTestCase):
         self.assertIsNone(self.enqueued_job())
 
 
+    @patch("os.path.exists", return_value=True)
+    def test_webui_at_filesystem_root_preserves_structure(self, mock_exists):
+        """Extension two levels below / (e.g. /workspace/<repo>) must still
+        compute relative remote names, not fall back to basename."""
+        with patch.object(b2_storage, "extension_dir", "/workspace/b2-ext"):
+            b2_storage.on_image_saved(self.make_params("/outputs/txt2img-images/00001.png"))
+        job = self.enqueued_job()
+        self.assertEqual(job["remote_name"], "outputs/txt2img-images/00001.png")
+
+    @patch("os.path.exists", return_value=True)
+    def test_sibling_dir_with_common_prefix_uses_basename(self, mock_exists):
+        """A path in a sibling dir sharing a name prefix with the WebUI root
+        (e.g. /sd-webui-backup vs /sd-webui) must not leak a mangled relative path."""
+        with patch.object(b2_storage, "extension_dir", "/sd-webui/extensions/b2-ext"):
+            b2_storage.on_image_saved(self.make_params("/sd-webui-backup/00002.png"))
+        job = self.enqueued_job()
+        self.assertEqual(job["remote_name"], "00002.png")
+
+
 class TestUploadJobProcessing(B2StorageTestCase):
 
     @patch("scripts.b2_storage.B2NativeAdapter")
