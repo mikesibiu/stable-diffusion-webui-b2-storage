@@ -77,7 +77,7 @@ def on_ui_settings():
     ))
     shared.opts.add_option("b2_storage_bucket", shared.OptionInfo(
         "",
-        "B2 Bucket Name (falls back to B2_BUCKET env var)",
+        "B2 Bucket Name — must already exist, the extension will not create it (falls back to B2_BUCKET env var)",
         section=section
     ))
     shared.opts.add_option("b2_storage_s3_endpoint", shared.OptionInfo(

@@ -37,9 +37,11 @@ This extension automatically uploads all generated images from the [Stable Diffu
 
 ---
 
-## Creating a B2 Application Key
+## Creating a B2 Bucket and Application Key
 
-In your Backblaze account, create an application key **restricted to the target bucket** with read/write capabilities. Single-bucket keys are fully supported and recommended — if the extension is pointed at a bucket the key cannot access, the log will say so explicitly.
+**The bucket must already exist — the extension will not create it.** Create a (private) bucket in your Backblaze account first. If the configured bucket doesn't exist, uploads are skipped with a clear `Bucket 'name' not found` message in the log; images are still saved locally and generation is never interrupted.
+
+Then create an application key **restricted to that bucket** with read/write capabilities. Single-bucket keys are fully supported and recommended — if the extension is pointed at a bucket the key cannot access, the log will say so explicitly.
 
 ---
 
@@ -52,7 +54,7 @@ In your Backblaze account, create an application key **restricted to the target 
    * **B2 API Type:** Select `native` or `s3`.
    * **B2 Key ID / S3 Access Key:** Your Backblaze application Key ID.
    * **B2 Application Key / S3 Secret Key:** Your Backblaze application key (masked in the UI).
-   * **B2 Bucket Name:** Name of the B2 bucket.
+   * **B2 Bucket Name:** Name of an existing B2 bucket (the extension does not create buckets).
    * **B2 S3 Endpoint:** Required only if using the `s3` API type (e.g., `https://s3.us-west-004.backblazeb2.com`).
    * **Delete local image copy after successful B2 upload:** Check to delete the local file after it has been safely pushed to the cloud. *See caveats below.*
 4. Click **Apply settings** at the top of the Settings page.
