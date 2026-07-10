@@ -159,15 +159,24 @@ class TestLiveFaultInjection(unittest.TestCase):
         local_path = make_payload_file()
         self.addCleanup(os.unlink, local_path)
         uploaded = []
+        exhaustions = 0
         try:
             with mock_patch.object(mod.requests, "post", side_effect=post_with_fault_injection):
                 for i in range(self.UPLOAD_COUNT):
                     remote = f"{TEST_PREFIX}fault-injection-{uuid.uuid4().hex}.png"
                     try:
                         adapter.upload_file(local_path, remote, BUCKET)
-                    except B2AdapterException:
-                        # 3 injected failures in a row exhausted the retry
-                        # budget — one more full attempt must succeed.
+                    except B2AdapterException as e:
+                        # Sustained injection can legitimately exhaust the
+                        # retry budget. The adapter's contract for that case
+                        # is a clean failure after MAX_UPLOAD_ATTEMPTS —
+                        # assert it (not just swallow it), count it, then
+                        # give the file a fresh set of attempts.
+                        self.assertIn(
+                            f"after {mod.MAX_UPLOAD_ATTEMPTS} attempts", str(e),
+                            "retry budget exhaustion must surface as the documented error",
+                        )
+                        exhaustions += 1
                         adapter.upload_file(local_path, remote, BUCKET)
                     uploaded.append(remote)
 
@@ -176,7 +185,9 @@ class TestLiveFaultInjection(unittest.TestCase):
                 self.assertIn(remote, listed)
 
             retries = sum(1 for r in records if r.levelno >= logging.WARNING)
-            print(f"\n[fault-injection] {self.UPLOAD_COUNT} uploads OK, {retries} injected failure(s) retried")
+            print(f"\n[fault-injection] {self.UPLOAD_COUNT} uploads OK, "
+                  f"{retries} injected failure(s) retried, "
+                  f"{exhaustions} retry-budget exhaustion(s) (verified clean)")
         finally:
             for remote in uploaded:
                 try:
