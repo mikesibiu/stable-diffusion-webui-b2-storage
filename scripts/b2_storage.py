@@ -16,6 +16,8 @@ from b2_storage_adapter import B2NativeAdapter, B2S3Adapter, B2AdapterException
 # Setup logger
 logger = logging.getLogger("B2StorageExtension")
 logger.setLevel(logging.INFO)
+# Don't propagate to the WebUI's root logger — it would print every message twice
+logger.propagate = False
 
 # Make sure logger logs to console
 if not logger.handlers:

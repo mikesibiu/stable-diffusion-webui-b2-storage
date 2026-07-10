@@ -221,3 +221,10 @@ class TestUploadJobProcessing(B2StorageTestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestLogging(unittest.TestCase):
+
+    def test_logger_does_not_propagate_to_root(self):
+        """Prevents every message appearing twice in the WebUI console."""
+        self.assertFalse(b2_storage.logger.propagate)
