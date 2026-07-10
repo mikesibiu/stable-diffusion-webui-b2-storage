@@ -262,6 +262,45 @@ class TestB2NativeAdapterUpload(unittest.TestCase):
         )
 
 
+    def test_upload_streams_file_instead_of_buffering(self):
+        """The request body must be a file object (streamed), not bytes in memory."""
+        self.mock_requests.post.side_effect = [
+            self.upload_url_response(),
+            make_response({"fileId": "fid1"}),
+        ]
+
+        self.adapter.upload_file(self.tmp.name, "outputs/img.png", "my-bucket")
+
+        body = self.mock_requests.post.call_args_list[-1].kwargs["data"]
+        self.assertNotIsInstance(body, (bytes, bytearray))
+        self.assertTrue(hasattr(body, "read"), "upload body should be a readable file object")
+        upload_headers = self.mock_requests.post.call_args_list[-1].kwargs["headers"]
+        self.assertEqual(upload_headers["Content-Length"], str(os.path.getsize(self.tmp.name)))
+
+    def test_upload_reopens_file_for_each_retry(self):
+        """A retried upload must resend from the start of the file, not an exhausted handle."""
+        failed = make_response({}, status_code=503)
+        ok = make_response({"fileId": "fid1"})
+        self.mock_requests.post.side_effect = [
+            self.upload_url_response(), failed,
+            self.upload_url_response(), ok,
+        ]
+
+        self.adapter.upload_file(self.tmp.name, "outputs/img.png", "my-bucket")
+
+        bodies = [c.kwargs["data"] for c in self.mock_requests.post.call_args_list[1::2]]
+        self.assertEqual(len(bodies), 2)
+        self.assertIsNot(bodies[0], bodies[1], "each attempt must use a fresh file handle")
+
+    def test_upload_rejects_files_over_single_upload_cap(self):
+        """B2 caps single-part uploads at 5 GB; fail fast with a clear error."""
+        with patch("b2_storage_adapter.os.path.getsize", return_value=6 * 1024 ** 3):
+            with self.assertRaises(B2AdapterException) as ctx:
+                self.adapter.upload_file(self.tmp.name, "outputs/big.bin", "my-bucket")
+        self.assertIn("large-file", str(ctx.exception))
+        self.mock_requests.post.assert_not_called()
+
+
 class TestB2NativeAdapterListFiles(unittest.TestCase):
 
     @patch("b2_storage_adapter.requests")

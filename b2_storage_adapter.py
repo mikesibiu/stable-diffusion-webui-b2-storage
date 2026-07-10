@@ -43,6 +43,9 @@ USER_AGENT = f"sd-webui-b2-storage/{__version__}+python/{platform.python_version
 MAX_UPLOAD_ATTEMPTS = 3
 API_TIMEOUT = 15
 TRANSFER_TIMEOUT = 60
+# B2 service limit for single-part uploads; beyond this the large-file
+# (multipart) API is required, which this adapter does not implement.
+MAX_SINGLE_UPLOAD_BYTES = 5 * 1024 ** 3
 
 
 class B2AdapterException(Exception):
@@ -255,12 +258,23 @@ class B2NativeAdapter(B2StorageAdapter):
         if not os.path.exists(local_path):
             raise B2AdapterException(f"Local file does not exist: {local_path}")
 
+        file_size = os.path.getsize(local_path)
+        if file_size > MAX_SINGLE_UPLOAD_BYTES:
+            raise B2AdapterException(
+                f"File is {file_size} bytes; single-part B2 uploads are capped at "
+                f"{MAX_SINGLE_UPLOAD_BYTES} bytes and the large-file API is not implemented."
+            )
+
         bucket_id = self._get_bucket_id(bucket_name)
 
+        # Two-pass streaming: hash in chunks first, then stream the body,
+        # so the file is never held fully in memory.
+        sha1 = hashlib.sha1()
         with open(local_path, "rb") as f:
-            file_data = f.read()
+            for chunk in iter(lambda: f.read(65536), b""):
+                sha1.update(chunk)
+        sha1_hash = sha1.hexdigest()
 
-        sha1_hash = hashlib.sha1(file_data).hexdigest()
         src_mtime_millis = str(int(os.path.getmtime(local_path) * 1000))
         content_type, _ = mimetypes.guess_type(local_path)
         if not content_type:
@@ -278,16 +292,18 @@ class B2NativeAdapter(B2StorageAdapter):
                     "User-Agent": USER_AGENT,
                     "X-Bz-File-Name": _encode_file_name(remote_name),
                     "Content-Type": content_type,
-                    "Content-Length": str(len(file_data)),
+                    "Content-Length": str(file_size),
                     "X-Bz-Content-Sha1": sha1_hash,
                     "X-Bz-Info-src_last_modified_millis": src_mtime_millis
                 }
-                response = requests.post(
-                    upload_url,
-                    headers=upload_headers,
-                    data=file_data,
-                    timeout=TRANSFER_TIMEOUT
-                )
+                # Fresh handle per attempt: a retried upload must restart the stream
+                with open(local_path, "rb") as body:
+                    response = requests.post(
+                        upload_url,
+                        headers=upload_headers,
+                        data=body,
+                        timeout=TRANSFER_TIMEOUT
+                    )
                 status = response.status_code
                 if status == 200:
                     file_id = response.json()["fileId"]
