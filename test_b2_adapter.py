@@ -292,6 +292,25 @@ class TestB2NativeAdapterUpload(unittest.TestCase):
         self.assertEqual(len(bodies), 2)
         self.assertIsNot(bodies[0], bodies[1], "each attempt must use a fresh file handle")
 
+    def test_upload_accepts_file_exactly_at_single_upload_cap(self):
+        """A file of exactly 5 GiB (B2's documented cap) must not be rejected locally."""
+        from b2_storage_adapter import MAX_SINGLE_UPLOAD_BYTES
+        self.mock_requests.post.side_effect = [
+            self.upload_url_response(),
+            make_response({"fileId": "fid1"}),
+        ]
+        with patch("b2_storage_adapter.os.path.getsize", return_value=MAX_SINGLE_UPLOAD_BYTES):
+            self.adapter.upload_file(self.tmp.name, "outputs/big.bin", "my-bucket")
+        upload_headers = self.mock_requests.post.call_args_list[-1].kwargs["headers"]
+        self.assertEqual(upload_headers["Content-Length"], str(MAX_SINGLE_UPLOAD_BYTES))
+
+    def test_upload_rejects_file_one_byte_over_cap(self):
+        from b2_storage_adapter import MAX_SINGLE_UPLOAD_BYTES
+        with patch("b2_storage_adapter.os.path.getsize", return_value=MAX_SINGLE_UPLOAD_BYTES + 1):
+            with self.assertRaises(B2AdapterException):
+                self.adapter.upload_file(self.tmp.name, "outputs/big.bin", "my-bucket")
+        self.mock_requests.post.assert_not_called()
+
     def test_upload_rejects_files_over_single_upload_cap(self):
         """B2 caps single-part uploads at 5 GB; fail fast with a clear error."""
         with patch("b2_storage_adapter.os.path.getsize", return_value=6 * 1024 ** 3):

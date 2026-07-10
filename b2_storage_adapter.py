@@ -45,6 +45,8 @@ API_TIMEOUT = 15
 TRANSFER_TIMEOUT = 60
 # B2 service limit for single-part uploads; beyond this the large-file
 # (multipart) API is required, which this adapter does not implement.
+# Backblaze documents the cap as 5 GiB = 5 * 2^30 = 5,368,709,120 bytes
+# (https://www.backblaze.com/docs/cloud-storage-upload-and-manage-objects).
 MAX_SINGLE_UPLOAD_BYTES = 5 * 1024 ** 3
 
 
