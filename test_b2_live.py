@@ -122,6 +122,84 @@ class TestLiveNativeAdapter(unittest.TestCase):
             )
 
 
+@unittest.skipUnless(CREDENTIALS_SET, "B2_TEST_KEY_ID / B2_TEST_APPLICATION_KEY / B2_TEST_BUCKET not set")
+class TestLiveFaultInjection(unittest.TestCase):
+    """
+    B2 integration checklist: verify upload resilience using Backblaze's
+    fault-injection header (X-Bz-Test-Mode: fail_some_uploads), which makes
+    the real service intermittently fail uploads with 503.
+    """
+
+    UPLOAD_COUNT = 4
+
+    def test_uploads_survive_injected_503_failures(self):
+        import logging
+        from unittest.mock import patch as mock_patch
+        import b2_storage_adapter as mod
+
+        adapter = B2NativeAdapter(KEY_ID, APPLICATION_KEY)
+        adapter.authenticate()
+
+        real_post = mod.requests.post
+
+        def post_with_fault_injection(url, **kwargs):
+            headers = dict(kwargs.get("headers") or {})
+            headers["X-Bz-Test-Mode"] = "fail_some_uploads"
+            kwargs["headers"] = headers
+            return real_post(url, **kwargs)
+
+        # Count the adapter's retry warnings so the test can report whether
+        # faults were actually injected during this run.
+        records = []
+        handler = logging.Handler()
+        handler.emit = records.append
+        mod.logger.addHandler(handler)
+        self.addCleanup(mod.logger.removeHandler, handler)
+
+        local_path = make_payload_file()
+        self.addCleanup(os.unlink, local_path)
+        uploaded = []
+        exhaustions = 0
+        try:
+            with mock_patch.object(mod.requests, "post", side_effect=post_with_fault_injection):
+                for i in range(self.UPLOAD_COUNT):
+                    remote = f"{TEST_PREFIX}fault-injection-{uuid.uuid4().hex}.png"
+                    try:
+                        adapter.upload_file(local_path, remote, BUCKET)
+                    except B2AdapterException as e:
+                        # Sustained injection can legitimately exhaust the
+                        # retry budget. The adapter's contract for that case
+                        # is a clean failure after MAX_UPLOAD_ATTEMPTS —
+                        # assert it (not just swallow it), count it, then
+                        # give the file a fresh set of attempts.
+                        self.assertIn(
+                            f"after {mod.MAX_UPLOAD_ATTEMPTS} attempts", str(e),
+                            "retry budget exhaustion must surface as the documented error",
+                        )
+                        exhaustions += 1
+                        adapter.upload_file(local_path, remote, BUCKET)
+                    uploaded.append(remote)
+
+            listed = {f["name"] for f in adapter.list_files(BUCKET, prefix=f"{TEST_PREFIX}fault-injection-")}
+            for remote in uploaded:
+                self.assertIn(remote, listed)
+
+            retries = sum(1 for r in records if r.levelno >= logging.WARNING)
+            print(f"\n[fault-injection] {self.UPLOAD_COUNT} uploads OK, "
+                  f"{retries} injected failure(s) retried, "
+                  f"{exhaustions} retry-budget exhaustion(s) (verified clean)")
+        finally:
+            for remote in uploaded:
+                try:
+                    for f in adapter.list_files(BUCKET, prefix=remote):
+                        adapter._api_request(
+                            "b2_delete_file_version",
+                            {"fileName": f["name"], "fileId": f["id"]},
+                        )
+                except B2AdapterException:
+                    pass
+
+
 @unittest.skipUnless(
     CREDENTIALS_SET and S3_ENDPOINT and BOTO3_AVAILABLE,
     "B2_TEST_S3_ENDPOINT not set (or boto3 not installed)",

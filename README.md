@@ -1,5 +1,7 @@
 # Stable Diffusion WebUI Backblaze B2 Cloud Storage Extension
 
+[![tests](https://github.com/mikesibiu/stable-diffusion-webui-b2-storage/actions/workflows/ci.yml/badge.svg)](https://github.com/mikesibiu/stable-diffusion-webui-b2-storage/actions/workflows/ci.yml)
+
 This extension automatically uploads all generated images from the [Stable Diffusion WebUI (AUTOMATIC1111)](https://github.com/AUTOMATIC1111/stable-diffusion-webui) to your **Backblaze B2 Cloud Storage** bucket, with options for the native REST API, the S3-Compatible API, and automatic local disk cleanup.
 
 > Works with **Backblaze B2 or any S3-compatible storage**: the `s3` API type speaks the standard S3 protocol with a configurable endpoint — just point the endpoint setting at your provider.
@@ -106,7 +108,7 @@ python3 -m pytest test_b2_live.py -v
 ### Limitations
 
 * Files larger than 200 MB should use B2's multipart (large file) API per the integration checklist. Generated images are far below this, so multipart upload is not implemented.
-* To smoke-test resilience against a live bucket, B2 supports fault-injection headers such as `X-Bz-Test-Mode: fail_some_uploads` and `expire_some_account_authorization_tokens`.
+* Upload resilience is smoke-tested against the live service using B2's `X-Bz-Test-Mode: fail_some_uploads` fault-injection header (part of the opt-in live suite); `expire_some_account_authorization_tokens` remains available for manual token-expiry testing.
 
 ---
 
