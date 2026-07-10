@@ -2,7 +2,7 @@
 
 This extension automatically uploads all generated images from the [Stable Diffusion WebUI (AUTOMATIC1111)](https://github.com/AUTOMATIC1111/stable-diffusion-webui) to your **Backblaze B2 Cloud Storage** bucket, with options for the native REST API, the S3-Compatible API, and automatic local disk cleanup.
 
-> **Not just Backblaze:** the `s3` API type speaks the standard S3 protocol with a configurable endpoint, so it works with **any S3-compatible storage** — AWS S3, Cloudflare R2, MinIO, Wasabi, DigitalOcean Spaces, and others. Just point the endpoint setting at your provider.
+> Works with **Backblaze B2 or any S3-compatible storage**: the `s3` API type speaks the standard S3 protocol with a configurable endpoint — just point the endpoint setting at your provider.
 
 ---
 
@@ -10,7 +10,7 @@ This extension automatically uploads all generated images from the [Stable Diffu
 
 * **Auto-Upload:** Automatically intercepts generated images at the `on_image_saved` hook.
 * **Non-Blocking:** Uploads run on a background worker thread, so image generation never waits on the network — batch generations queue up and upload while you keep working.
-* **Dual Protocols:** Choose between B2's native REST API (lightweight, zero extra dependencies) or the standard S3-Compatible API (via `boto3`), which also works with AWS S3, Cloudflare R2, MinIO, Wasabi, and any other S3-compatible provider.
+* **Dual Protocols:** Choose between Backblaze B2's native REST API (lightweight, zero extra dependencies) or the standard S3-Compatible API (via `boto3`), which works with any S3-compatible provider.
 * **Restricted Keys Supported:** Works with application keys scoped to a single bucket (the recommended setup) — no account-wide `listBuckets` permission required.
 * **Follows the [B2 Integration Checklist](https://www.backblaze.com/docs/cloud-storage-integration-checklist):**
   * Upload URL/token pairs are reused across files and only refreshed after a failure.
